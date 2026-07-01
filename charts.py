@@ -217,31 +217,72 @@ def plot_port_throughput(throughput_df, output_dir):
 
 # ── 延误分布（2 图）──────────────────────────────────────────
 def plot_delay_distribution(result_df, output_dir):
+    """绘制延误分布图。
+
+    修复点：
+    1. Matplotlib 3.9+ 将 boxplot 的 labels 参数改名为 tick_labels；
+       新版环境中继续使用 labels 可能触发 TypeError。
+    2. 上传数据或承运商筛选后，某些运输方式/延误数据可能为空；
+       先清洗再绘图，避免空数据导致图表生成失败。
+    """
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 
+    df = result_df.copy()
+    df["实际延误天数"] = pd.to_numeric(df["实际延误天数"], errors="coerce")
+    df = df.dropna(subset=["实际延误天数"])
+
     # 正常 vs 异常直方图
-    ax      = axes[0]
-    normal  = result_df[result_df["final_anomaly"] == 0]["实际延误天数"]
-    anomaly = result_df[result_df["final_anomaly"] == 1]["实际延误天数"]
-    ax.hist(normal,  bins=30, color=COLORS["ok"],     alpha=0.6, label="正常", density=True)
-    ax.hist(anomaly, bins=20, color=COLORS["accent"],  alpha=0.7, label="异常", density=True)
+    ax = axes[0]
+    normal = df.loc[df["final_anomaly"] == 0, "实际延误天数"].dropna()
+    anomaly = df.loc[df["final_anomaly"] == 1, "实际延误天数"].dropna()
+
+    has_hist = False
+    if len(normal) > 0:
+        ax.hist(normal, bins=30, color=COLORS["ok"], alpha=0.6, label="正常", density=True)
+        has_hist = True
+    if len(anomaly) > 0:
+        ax.hist(anomaly, bins=20, color=COLORS["accent"], alpha=0.7, label="异常", density=True)
+        has_hist = True
+    if not has_hist:
+        ax.text(0.5, 0.5, "暂无可绘制的延误数据", ha="center", va="center", transform=ax.transAxes)
+
     ax.set_xlabel("延误天数", fontsize=11)
     ax.set_ylabel("频率密度", fontsize=11)
     ax.set_title("延误天数分布：正常 vs 异常",
                  fontsize=12, fontweight="bold", color=COLORS["primary"])
-    ax.legend(fontsize=10)
+    if has_hist:
+        ax.legend(fontsize=10)
     ax.spines[["top", "right"]].set_visible(False)
 
     # 运输方式箱线图
-    ax    = axes[1]
-    modes = result_df["运输方式"].unique()
-    data  = [result_df[result_df["运输方式"] == m]["实际延误天数"].values for m in modes]
-    bp    = ax.boxplot(data, labels=modes, patch_artist=True, notch=False,
-                       medianprops={"color": COLORS["accent"], "linewidth": 2})
-    box_colors = [COLORS["primary"], COLORS["mid"], COLORS["ok"]]
-    for patch, color in zip(bp["boxes"], box_colors):
-        patch.set_facecolor(color)
-        patch.set_alpha(0.7)
+    ax = axes[1]
+    mode_df = df.dropna(subset=["运输方式"])
+    grouped = []
+    for mode, group in mode_df.groupby("运输方式"):
+        values = group["实际延误天数"].dropna().to_numpy()
+        if len(values) > 0:
+            grouped.append((str(mode), values))
+
+    if grouped:
+        modes = [item[0] for item in grouped]
+        data = [item[1] for item in grouped]
+
+        # tick_labels 是 Matplotlib 3.9+ 的新参数；兼容少数旧版本时回退到 labels。
+        try:
+            bp = ax.boxplot(data, tick_labels=modes, patch_artist=True, notch=False,
+                            medianprops={"color": COLORS["accent"], "linewidth": 2})
+        except TypeError:
+            bp = ax.boxplot(data, labels=modes, patch_artist=True, notch=False,
+                            medianprops={"color": COLORS["accent"], "linewidth": 2})
+
+        box_colors = [COLORS["primary"], COLORS["mid"], COLORS["ok"]]
+        for patch, color in zip(bp["boxes"], box_colors * ((len(bp["boxes"]) // len(box_colors)) + 1)):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+    else:
+        ax.text(0.5, 0.5, "暂无可绘制的运输方式数据", ha="center", va="center", transform=ax.transAxes)
+        ax.set_xticks([])
+
     ax.set_ylabel("延误天数", fontsize=11)
     ax.set_title("不同运输方式的延误分布",
                  fontsize=12, fontweight="bold", color=COLORS["primary"])

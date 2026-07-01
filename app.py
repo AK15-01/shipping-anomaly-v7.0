@@ -8,7 +8,7 @@
 3. 移除远程 logo 图片，避免 Streamlit Cloud 上出现左上角破图标。
 4. 兼容根目录模块与 src/ 模块两种结构。
 """
-
+import requests
 import os
 import sys
 import io
@@ -257,7 +257,7 @@ with st.sidebar:
     api_key = ""
 
     if ai_mode == "演示模式（推荐，无需 Key）":
-        st.success("已开启演示模式：无需 API Key，可直接体验完整流程。")
+        st.success("已开启演示模式：无需 API Key，HR 可直接体验完整流程。")
         st.caption("该模式展示的是基于检测结果生成的固定业务分析模板，不调用外部 API。")
 
     elif ai_mode == "高级功能：使用 DeepSeek API Key":
@@ -687,4 +687,3 @@ with tab5:
                     mime="image/png",
                     use_container_width=True,
                 )
-
